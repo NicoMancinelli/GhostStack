@@ -18,3 +18,5 @@ flask
 esptool
 flask-socketio
 requests
+paramiko
+paho-mqtt
