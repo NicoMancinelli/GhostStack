@@ -11,23 +11,28 @@ import time
 
 # GhostStack: Master Orchestrator (GhostStack-CTL)
 #
-# Centralized CLI to manage modules, intercept their outputs, 
-# and log detected threats to a local SQLite database.
-# Now supports automated hardware triggering via Serial to the ESP32.
+# Now includes 'Active Sentry' mode for multi-factor hardware triggering.
 
 DB_PATH = "ghoststack.db"
 
 class GhostStackCTL:
-    def __init__(self, esp_port=None):
+    def __init__(self, esp_port=None, sentry_mode=False):
         self.processes = {}
         self.init_db()
         self.serial_conn = None
         self.trigger_timer = None
         
+        # Sentry Mode State
+        self.sentry_mode = sentry_mode
+        self.last_cv_event = 0
+        self.last_rf_event = 0
+        
         if esp_port:
             try:
                 self.serial_conn = serial.Serial(esp_port, 115200, timeout=1)
                 print(f"[*] Hardware Triggering ENABLED on {esp_port}")
+                if self.sentry_mode:
+                    print("[*] SENTRY MODE ACTIVE: Multi-factor trigger required (CV + RF/Network)")
             except Exception as e:
                 print(f"[-] Failed to connect to ESP32: {e}")
 
@@ -59,21 +64,37 @@ class GhostStackCTL:
             line = line.strip()
             if line:
                 print(f"[{name}] {line}")
-                # Simple heuristic: If the line contains "[!]", log it as a threat event
                 if "[!]" in line:
                     c.execute('INSERT INTO events (module, event) VALUES (?, ?)', (name, line))
                     conn.commit()
                     
-                    # Automated Hardware Triggering
+                    # Update Sentry State
+                    current_time = time.time()
+                    if "yolo" in name:
+                        self.last_cv_event = current_time
+                    else:
+                        self.last_rf_event = current_time
+
+                    # Trigger Logic
+                    should_trigger = False
                     if self.serial_conn:
-                        self.serial_conn.write(b'1')
-                        print(f"[!] THREAT DETECTED by {name}. Sending Hardware Trigger...")
-                        
-                        # Reset timeout (keeps strobe on for 10 seconds after last detection)
-                        if self.trigger_timer:
-                            self.trigger_timer.cancel()
-                        self.trigger_timer = threading.Timer(10.0, self.disengage_strobe)
-                        self.trigger_timer.start()
+                        if self.sentry_mode:
+                            # Sentry Trigger: Both events must be within 30s
+                            if abs(self.last_cv_event - self.last_rf_event) < 30:
+                                should_trigger = True
+                                print("[!] SENTRY CONDITION MET: CV + RF Correlation.")
+                        else:
+                            # Standard Trigger: Any detection
+                            should_trigger = True
+
+                        if should_trigger:
+                            self.serial_conn.write(b'1')
+                            print(f"[!] TRIGGER SENT by {name}.")
+                            
+                            if self.trigger_timer:
+                                self.trigger_timer.cancel()
+                            self.trigger_timer = threading.Timer(10.0, self.disengage_strobe)
+                            self.trigger_timer.start()
         conn.close()
 
     def start_module(self, name, command):
