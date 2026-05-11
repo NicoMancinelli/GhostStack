@@ -1,18 +1,26 @@
 import cv2
 from ultralytics import YOLO
 import logging
+import os
 
 # GhostStack: CV Layer - YOLOv8 Baseline Detector
 # 
 # This script serves as the baseline for testing adversarial patches.
-# It runs a real-time YOLOv8-nano detector on the primary webcam.
+# It runs a real-time YOLOv8 detector on the primary webcam.
+# Automatically utilizes TFLite models if available for optimized edge performance.
 
 logging.basicConfig(level=logging.INFO)
 
 def main():
-    # Load the YOLOv8n model
-    logging.info("[*] Loading YOLOv8n model...")
-    model = YOLO('yolov8n.pt')
+    # Prefer TFLite optimized model
+    model_path = 'yolov8n.tflite'
+    if not os.path.exists(model_path):
+        logging.info("[!] TFLite model not found. Falling back to PyTorch (.pt).")
+        model_path = 'yolov8n.pt'
+        logging.info("[*] Consider running 'python3 cv_adversarial/utils/convert_model.py' to optimize performance.")
+
+    logging.info(f"[*] Loading YOLOv8 model: {model_path}...")
+    model = YOLO(model_path)
 
     # Initialize webcam
     cap = cv2.VideoCapture(0)

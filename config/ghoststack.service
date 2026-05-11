@@ -1,0 +1,18 @@
+[Unit]
+Description=GhostStack Master Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/GhostStack
+ExecStart=/usr/bin/python3 scripts/ghoststack_ctl.py start-all
+Restart=on-failure
+RestartSec=5
+
+# Logging
+StandardOutput=append:/var/log/ghoststack.log
+StandardError=append:/var/log/ghoststack_error.log
+
+[Install]
+WantedBy=multi-user.target

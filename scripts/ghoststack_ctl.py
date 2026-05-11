@@ -12,19 +12,23 @@ import yaml
 import re
 import json
 import math
+import datetime
+import shutil
 
 # GhostStack: Master Orchestrator (Deployment Grade)
 #
 # A production-ready process supervisor featuring a Policy Engine,
-# Hardware Health Monitoring, and Structured JSON Logging.
+# Hardware Health Monitoring, Structured JSON Logging, and Mission Archiving.
 
 DB_PATH = "ghoststack.db"
 SAFE_ZONES_PATH = "config/safe_zones.yaml"
 POLICIES_PATH = "config/policies.yaml"
+MISSIONS_DIR = "missions"
 
 class GhostStackCTL:
     def __init__(self, esp_port=None, sentry_mode=False):
         self.processes = {}
+        self.mission_dir = self.init_mission_archive()
         self.init_db()
         self.serial_conn = None
         self.trigger_timer = None
@@ -42,6 +46,20 @@ class GhostStackCTL:
         
         if esp_port:
             self.connect_hardware()
+
+    def init_mission_archive(self):
+        """Creates a timestamped mission folder and backs up the previous database."""
+        os.makedirs(MISSIONS_DIR, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        mission_path = os.path.join(MISSIONS_DIR, f"MISSION_{timestamp}")
+        os.makedirs(mission_path, exist_ok=True)
+        
+        if os.path.exists(DB_PATH):
+            shutil.copy(DB_PATH, os.path.join(mission_path, "previous_ghoststack.db"))
+            print(f"[*] Previous mission database archived to {mission_path}")
+            
+        print(f"[*] Mission Archive initialized: {mission_path}")
+        return mission_path
 
     def init_db(self):
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -111,14 +129,20 @@ class GhostStackCTL:
 
     def log_output(self, proc, name):
         """Supervisor loop for child process output."""
-        for line in iter(proc.stdout.readline, ''):
-            line = line.strip()
-            if not line: continue
-            
-            print(f"[{name}] {line}")
-            if "[!]" in line:
-                self.log_to_db(name, line)
-                self.execute_policy_check(name, line)
+        mission_log = os.path.join(self.mission_dir, f"{name}_raw.log")
+        
+        with open(mission_log, "a") as f_log:
+            for line in iter(proc.stdout.readline, ''):
+                line = line.strip()
+                if not line: continue
+                
+                print(f"[{name}] {line}")
+                f_log.write(f"{datetime.datetime.now().isoformat()} - {line}\n")
+                f_log.flush()
+                
+                if "[!]" in line:
+                    self.log_to_db(name, line)
+                    self.execute_policy_check(name, line)
 
     def start_module(self, name, command):
         if name in self.processes: return
