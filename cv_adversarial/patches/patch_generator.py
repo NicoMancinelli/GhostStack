@@ -26,7 +26,7 @@ class PatchOptimizer:
         self.optimizer = torch.optim.Adam([self.patch], lr=0.01)
 
     def optimize(self, target_img_path, iterations=100):
-        logging.info(f"[*] Starting patch optimization on {target_img_path}...")
+        logging.info(f"[*] Starting patch optimization (with EOT) on {target_img_path}...")
         
         # Load and preprocess image
         img = Image.open(target_img_path).convert('RGB').resize((640, 640))
@@ -35,9 +35,19 @@ class PatchOptimizer:
         for i in range(iterations):
             self.optimizer.zero_grad()
             
-            # Place patch on the image (simplified: top-left corner)
+            # EOT: Random Transformations for the patch
+            # Apply rotation and brightness jitter to the patch before placement
+            trans_patch = self.patch.clone()
+            if np.random.rand() > 0.5:
+                angle = np.random.uniform(-15, 15)
+                trans_patch = T.functional.rotate(trans_patch, angle)
+            
+            jitter = T.ColorJitter(brightness=0.2, contrast=0.2)
+            trans_patch = jitter(trans_patch)
+
+            # Place transformed patch on the image
             adv_img = img_tensor.clone()
-            adv_img[:, :, :self.patch_size, :self.patch_size] = self.patch
+            adv_img[:, :, :self.patch_size, :self.patch_size] = trans_patch
             
             # Forward pass through YOLOv8
             # YOLOv8 returns a list of tensors for different tasks

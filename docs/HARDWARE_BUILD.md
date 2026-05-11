@@ -22,7 +22,20 @@ IR LED Array (-) ----------------------> MOSFET Drain
 Battery (-)   -------------------------> MOSFET Source (Common GND)
 ```
 
-## Safety Precautions
-1. **Eye Safety:** High-power IR is invisible. Do not stare directly at the emitters. Use IR-detecting cards or a phone camera (without IR filter) to verify operation.
-2. **Thermal Management:** High-power LEDs generate significant heat. Always use aluminum heat sinks.
-3. **Current Limits:** Ensure the MOSFET is logic-level (IRL series) to allow full switching from the ESP32 3.3V logic.
+## Bench Testing & Verification
+
+Once assembled, follow this procedure to verify the effectiveness of the Optical Blinder:
+
+### 1. Visual Verification (Non-Human Eye)
+Since IR is invisible, use a smartphone camera (many front-facing cameras lack IR filters) or a dedicated IR detection card to confirm the emitters are strobing correctly.
+
+### 2. Rolling Shutter Desync Test
+- **Target:** Any CMOS camera with a rolling shutter (most webcams/smartphones).
+- **Procedure:** 
+    1. Point the camera at a scene.
+    2. Activate the GhostStack Optical Module via `ghoststack_ctl.py`.
+    3. Observe the video feed. A successful desync will manifest as **static or moving horizontal dark/light bands** across the frame, which disrupts object detection and auto-exposure.
+
+### 3. LiDAR Interference Test
+- **Target:** Consumer LiDAR sensor (e.g., iPhone Pro LiDAR, RPLiDAR).
+- **Procedure:** Observe the point cloud in a visualizer. High-power IR pulses should manifest as "ghost points" or increased noise floor, potentially causing SLAM (Simultaneous Localization and Mapping) failures.
