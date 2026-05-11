@@ -1,0 +1,19 @@
+# GamutRF Configuration for GhostStack
+# Target: 2.4GHz / 5.8GHz Spectrum Analysis
+
+# Example gamutrf-scan configuration
+# Note: Full gamutrf deployment requires Docker or a native install.
+
+# Scan configuration
+freq-start: 2400000000
+freq-end: 2483500000
+sample-rate: 20000000
+gain: 40
+fft-size: 1024
+
+# Classification settings
+# Enables identification of Wi-Fi, Bluetooth, and non-standard drone signatures
+classifier: true
+inference-threshold: 0.85
+log-detections: true
+sqlite-path: "/home/neek/Dev/GhostStack/config/gamutrf/detections.db"
