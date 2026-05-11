@@ -1,0 +1,34 @@
+# GhostStack Deployment Policies
+# Defines automated responses to specific sensor triggers.
+
+policies:
+  - name: "Auto-Neutralize Known Drones"
+    condition:
+      module: "gamutrf"
+      event_contains: "dji_mavic"
+      min_confidence: 0.90
+    actions:
+      - type: "hardware_trigger"
+        value: "strobe_on"
+        duration_sec: 15
+      - type: "log_event"
+        message: "[CRITICAL] Automated Response: DJI Mavic Detected. Engaging Optical Blinder."
+
+  - name: "Backdoor Failover Hijack"
+    condition:
+      module: "quadruped_detect"
+      event_contains: "BACKDOOR AP DETECTED"
+    actions:
+      - type: "start_module"
+        module_name: "killswitch"
+        command: "python3 network_analysis/robot_research/mavlink_killswitch.py 192.168.123.255"
+      - type: "log_event"
+        message: "[ACTION] Unitree Backdoor Detected. Initiating MAVLink Hijack Sequence."
+
+  - name: "Safe Zone Inhibition"
+    condition:
+      state: "is_in_safe_zone"
+      value: true
+    actions:
+      - type: "inhibit_all_triggers"
+        message: "Target in Safe Zone. All hardware effectors suppressed."
