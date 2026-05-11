@@ -42,6 +42,63 @@ To democratize the study of autonomous system vulnerabilities. As robotics and a
 
 ---
 
+## System Architecture
+
+```mermaid
+graph TD
+    subgraph "GhostStack Controller (Raspberry Pi 5)"
+        ORCH[Master Orchestrator]
+        ROSS[ROS 2 / MAVLink Node]
+        SDR_PROC[SDR Signal Processor]
+        CV_PROC[YOLOv8 CV Engine]
+    end
+
+    subgraph "Sensors & Interfaces"
+        HACKRF[HackRF One / RTL-SDR]
+        ALFA[ALFA WiFi Adapter]
+        CAM[USB/CSI Camera]
+    end
+
+    subgraph "Effectors"
+        ESP32[ESP32-S3 Module]
+        IR_LED[IR LED Array]
+    end
+
+    HACKRF -->|IQ Data| SDR_PROC
+    ALFA -->|Packet Stream| ROSS
+    CAM -->|Video Feed| CV_PROC
+    
+    SDR_PROC --> ORCH
+    ROSS --> ORCH
+    CV_PROC --> ORCH
+    
+    ORCH -->|Trigger| ESP32
+    ESP32 -->|Strobe PWM| IR_LED
+```
+
+---
+
+## Data Flow & Threat Model
+
+```mermaid
+sequenceDiagram
+    participant UAV as Autonomous System (UAV/UGV)
+    participant GS as GhostStack SDR/WiFi
+    participant CV as GhostStack Vision
+    participant CTL as GhostStack Master CTL
+    participant OPT as Optical Disruption Module
+
+    UAV->>GS: Broadcasts Telemetry (MAVLink/RemoteID)
+    GS->>CTL: Signal Detected / Location Extracted
+    UAV->>CV: Enters Visual Range
+    CV->>CTL: Object Classified (YOLOv8)
+    CTL->>OPT: Trigger Countermeasure
+    OPT->>UAV: Optical Desync (IR Strobing)
+    Note right of UAV: Navigation/CV Failure
+```
+
+---
+
 ## Modular Architecture
 
 ### 📡 RF/EW (`rf_ew/`)
