@@ -14,3 +14,5 @@ ultralytics
 opencv-python
 SoapySDR
 pyyaml
+flask
+esptool

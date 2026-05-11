@@ -124,22 +124,35 @@ Physical-layer interference for camera and LiDAR systems.
 
 ## Getting Started
 
-### 1. Environment Setup
-Clone the repository and install the base dependencies on Kali Linux:
+### 1. Docker Deployment (Recommended)
+GhostStack includes a fully containerized environment, ensuring all RF, ROS 2, and AI dependencies are isolated.
 ```bash
 git clone https://github.com/your-repo/GhostStack.git
 cd GhostStack
+docker-compose up --build
+```
+*Once running, navigate to `http://localhost:5000` to view the **Live Threat Dashboard**.*
+
+### 2. Bare-Metal Environment Setup
+If you prefer running directly on Kali Linux:
+```bash
 chmod +x scripts/install_deps.sh
 ./scripts/install_deps.sh
 ```
 
-### 2. Hardware Assembly
+### 3. Hardware Assembly & Flashing
 Refer to `docs/HARDWARE_BUILD.md` for BOMs and schematics for the ESP32 Optical Blinder.
+You can automatically flash the firmware using the included script:
+```bash
+chmod +x scripts/flash_esp32.sh
+./scripts/flash_esp32.sh /dev/ttyUSB0
+```
 
-### 3. Execution
-- **RF Monitoring:** `python3 rf_ew/classification/remote_id_sniffer.py`
-- **Network Audit:** `python3 network_analysis/mavlink_exploits/disarm_poc.py`
-- **CV Research:** `python3 cv_adversarial/patches/yolo_detector.py`
+### 4. Execution (Bare-Metal)
+You can orchestrate the entire suite using the Master Controller, which automatically logs threats to a local SQLite database:
+- `python3 scripts/ghoststack_ctl.py start-rf`
+- `python3 scripts/ghoststack_ctl.py start-network`
+- `python3 dashboard/app.py` (to view the real-time web interface)
 
 ---
 

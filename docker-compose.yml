@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  ghoststack-core:
+    build: .
+    container_name: ghoststack-core
+    privileged: true # Required for direct SDR/USB hardware access
+    network_mode: "host" # Required for raw packet sniffing
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+    # Starts the RF scanner by default for demonstration
+    command: python3 scripts/ghoststack_ctl.py start-rf
+    
+  ghoststack-dashboard:
+    build: .
+    container_name: ghoststack-dashboard
+    ports:
+      - "5000:5000"
+    command: python3 dashboard/app.py
+    depends_on:
+      - ghoststack-core
