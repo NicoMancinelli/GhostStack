@@ -19,3 +19,13 @@ services:
     command: python3 dashboard/app.py
     depends_on:
       - ghoststack-core
+
+  gamutrf:
+    image: iqtlabs/gamutrf:latest
+    container_name: gamutrf
+    privileged: true
+    network_mode: "host"
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+    # Command runs GamutRF MQTT output targeting the local broker
+    command: gamutrf-scan --freq-start 2400e6 --freq-end 2483e6 --sample-rate 20e6 --gain 40 --classifier --mqtt_server 127.0.0.1
