@@ -1,0 +1,1 @@
+password\nadmin\n123456\nsecret\nghoststack
