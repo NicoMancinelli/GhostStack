@@ -6,18 +6,30 @@ import signal
 import sys
 import threading
 import sqlite3
+import serial
+import time
 
 # GhostStack: Master Orchestrator (GhostStack-CTL)
 #
 # Centralized CLI to manage modules, intercept their outputs, 
 # and log detected threats to a local SQLite database.
+# Now supports automated hardware triggering via Serial to the ESP32.
 
 DB_PATH = "ghoststack.db"
 
 class GhostStackCTL:
-    def __init__(self):
+    def __init__(self, esp_port=None):
         self.processes = {}
         self.init_db()
+        self.serial_conn = None
+        self.trigger_timer = None
+        
+        if esp_port:
+            try:
+                self.serial_conn = serial.Serial(esp_port, 115200, timeout=1)
+                print(f"[*] Hardware Triggering ENABLED on {esp_port}")
+            except Exception as e:
+                print(f"[-] Failed to connect to ESP32: {e}")
 
     def init_db(self):
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -33,6 +45,11 @@ class GhostStackCTL:
         conn.commit()
         conn.close()
 
+    def disengage_strobe(self):
+        if self.serial_conn:
+            self.serial_conn.write(b'0')
+            print("[*] Threat timeout reached. Disengaging Optical Blinder.")
+
     def log_output(self, proc, name):
         """Reads stdout of a subprocess and logs 'threats' to SQLite."""
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -46,6 +63,17 @@ class GhostStackCTL:
                 if "[!]" in line:
                     c.execute('INSERT INTO events (module, event) VALUES (?, ?)', (name, line))
                     conn.commit()
+                    
+                    # Automated Hardware Triggering
+                    if self.serial_conn:
+                        self.serial_conn.write(b'1')
+                        print(f"[!] THREAT DETECTED by {name}. Sending Hardware Trigger...")
+                        
+                        # Reset timeout (keeps strobe on for 10 seconds after last detection)
+                        if self.trigger_timer:
+                            self.trigger_timer.cancel()
+                        self.trigger_timer = threading.Timer(10.0, self.disengage_strobe)
+                        self.trigger_timer.start()
         conn.close()
 
     def start_module(self, name, command):
@@ -91,11 +119,14 @@ class GhostStackCTL:
         names = list(self.processes.keys())
         for name in names:
             self.stop_module(name)
+        if self.serial_conn:
+            self.serial_conn.write(b'0')
+            self.serial_conn.close()
 
 def main():
-    ctl = GhostStackCTL()
     parser = argparse.ArgumentParser(description="GhostStack Master Controller")
     parser.add_argument("command", choices=["start-rf", "start-network", "start-cv", "stop-all", "help"], help="Command to execute")
+    parser.add_argument("--esp-port", default=None, help="Serial port of ESP32 (e.g., /dev/ttyUSB0) for hardware triggers.")
     
     args = parser.parse_args()
 
@@ -103,10 +134,13 @@ def main():
         parser.print_help()
         sys.exit(0)
 
+    ctl = GhostStackCTL(esp_port=args.esp_port)
+
     try:
         if args.command == "start-rf":
             ctl.start_module("rf-scanner", "python3 rf_ew/scanner_24ghz.py")
             ctl.start_module("remote-id", "python3 rf_ew/classification/remote_id_sniffer.py")
+            ctl.start_module("gamutrf", "python3 rf_ew/classification/gamutrf_connector.py")
         
         elif args.command == "start-network":
             ctl.start_module("mav-sniff", "python3 network_analysis/ghoststack_network/mavlink_sniff.py")
