@@ -1,0 +1,13 @@
+# GhostStack: Safe Zone Configuration
+# Targets within these zones will NOT trigger hardware effectors.
+
+safe_zones:
+  - name: "Home Base"
+    lat: 37.7749
+    lon: -122.4194
+    radius_meters: 100
+
+  - name: "Testing Range Alpha"
+    lat: 34.0522
+    lon: -118.2437
+    radius_meters: 500

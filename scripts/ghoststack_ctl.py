@@ -11,9 +11,13 @@ import time
 
 # GhostStack: Master Orchestrator (GhostStack-CTL)
 #
-# Now includes 'Active Sentry' mode for multi-factor hardware triggering.
+# Now includes 'Active Sentry' mode and 'Geo-Fencing' logic.
+
+import yaml
+import math
 
 DB_PATH = "ghoststack.db"
+SAFE_ZONES_PATH = "config/safe_zones.yaml"
 
 class GhostStackCTL:
     def __init__(self, esp_port=None, sentry_mode=False):
@@ -27,6 +31,10 @@ class GhostStackCTL:
         self.last_cv_event = 0
         self.last_rf_event = 0
         
+        # Geo-Fencing State
+        self.safe_zones = self.load_safe_zones()
+        self.is_in_safe_zone = False
+        
         if esp_port:
             try:
                 self.serial_conn = serial.Serial(esp_port, 115200, timeout=1)
@@ -35,6 +43,40 @@ class GhostStackCTL:
                     print("[*] SENTRY MODE ACTIVE: Multi-factor trigger required (CV + RF/Network)")
             except Exception as e:
                 print(f"[-] Failed to connect to ESP32: {e}")
+
+    def load_safe_zones(self):
+        if os.path.exists(SAFE_ZONES_PATH):
+            try:
+                with open(SAFE_ZONES_PATH, 'r') as f:
+                    config = yaml.safe_load(f)
+                    print(f"[*] Loaded {len(config.get('safe_zones', []))} safe zones.")
+                    return config.get('safe_zones', [])
+            except Exception as e:
+                print(f"[-] Error loading safe zones: {e}")
+        return []
+
+    def check_geo_fence(self, lat, lon):
+        """Calculates distance to safe zones and updates state."""
+        for zone in self.safe_zones:
+            # Haversine formula for distance in meters
+            R = 6371000
+            phi1, phi2 = math.radians(lat), math.radians(zone['lat'])
+            dphi = math.radians(zone['lat'] - lat)
+            dlambda = math.radians(zone['lon'] - lon)
+            a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            dist = R * c
+            
+            if dist <= zone['radius_meters']:
+                if not self.is_in_safe_zone:
+                    print(f"[!] GEO-FENCE: Target entered Safe Zone '{zone['name']}'. Disabling triggers.")
+                self.is_in_safe_zone = True
+                return True
+        
+        if self.is_in_safe_zone:
+            print("[*] GEO-FENCE: Target left Safe Zone. Re-enabling triggers.")
+        self.is_in_safe_zone = False
+        return False
 
     def init_db(self):
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -60,6 +102,9 @@ class GhostStackCTL:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         c = conn.cursor()
         
+        # Regex for Lat/Lon extraction from log lines
+        coord_pattern = re.compile(r'([-+]?\d{1,2}\.\d+),\s*([-+]?\d{1,3}\.\d+)')
+
         for line in iter(proc.stdout.readline, ''):
             line = line.strip()
             if line:
@@ -68,6 +113,11 @@ class GhostStackCTL:
                     c.execute('INSERT INTO events (module, event) VALUES (?, ?)', (name, line))
                     conn.commit()
                     
+                    # Update Geo-Fence state if coordinates found
+                    match = coord_pattern.search(line)
+                    if match:
+                        self.check_geo_fence(float(match.group(1)), float(match.group(2)))
+
                     # Update Sentry State
                     current_time = time.time()
                     if "yolo" in name:
@@ -77,14 +127,12 @@ class GhostStackCTL:
 
                     # Trigger Logic
                     should_trigger = False
-                    if self.serial_conn:
+                    if self.serial_conn and not self.is_in_safe_zone:
                         if self.sentry_mode:
-                            # Sentry Trigger: Both events must be within 30s
                             if abs(self.last_cv_event - self.last_rf_event) < 30:
                                 should_trigger = True
                                 print("[!] SENTRY CONDITION MET: CV + RF Correlation.")
                         else:
-                            # Standard Trigger: Any detection
                             should_trigger = True
 
                         if should_trigger:
