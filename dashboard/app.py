@@ -1,17 +1,17 @@
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
-import sqlite3
-import os
-import re
 import threading
 import time
 
-# GhostStack: Tactical Command Dashboard (Deployment Grade)
-# Provides real-time mapping, hardware health, and mission event logging.
+from ghoststack.config_loader import load_targets
+from ghoststack.database import EventStore
+from ghoststack.geo import extract_coordinates
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
-DB_PATH = 'ghoststack.db'
+store = EventStore()
+targets = load_targets()
+map_center = targets.get("default_map_center", {"lat": 37.7749, "lon": -122.4194})
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -41,11 +41,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="header">
         <div style="font-weight: bold; font-size: 1.2rem; color: #3b82f6;">GHOSTSTACK // TACTICAL COMMAND</div>
-        <div id="health-status" style="font-size: 0.8rem;">
-            SDR: <span class="status-ok">ACTIVE</span> | 
-            ESP32: <span class="status-ok">LOCKED</span> | 
-            RPi5: <span class="status-ok">HEALTHY</span>
-        </div>
+        <div id="health-status" style="font-size: 0.8rem;">Loading health...</div>
     </div>
     <div class="main">
         <div class="panel">
@@ -59,7 +55,7 @@ HTML_TEMPLATE = """
                     <tbody id="events-table">
                         {% for row in rows %}
                         <tr>
-                            <td class="timestamp">{{ row[1].split(' ')[1] }}</td>
+                            <td class="timestamp">{{ row[1].split(' ')[1] if row[1] else '' }}</td>
                             <td class="{{ 'threat' if '[!]' in row[3] else '' }}">[{{ row[2] }}] {{ row[3] }}</td>
                         </tr>
                         {% endfor %}
@@ -70,7 +66,7 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        var map = L.map('map').setView([37.7749, -122.4194], 13);
+        var map = L.map('map').setView([{{ map_lat }}, {{ map_lon }}], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
             className: 'map-tiles'
@@ -79,23 +75,31 @@ HTML_TEMPLATE = """
         var bounds = [];
         var socket = io.connect('http://' + document.domain + ':' + location.port);
 
+        function renderHealth(health) {
+            var el = document.getElementById('health-status');
+            var parts = [];
+            for (var key in health) {
+                var ok = !(health[key].includes('NOT FOUND') || health[key].includes('OFFLINE'));
+                parts.push(key.toUpperCase() + ': <span class="' + (ok ? 'status-ok' : 'status-err') + '">' + health[key] + '</span>');
+            }
+            el.innerHTML = parts.join(' | ');
+        }
+
+        socket.on('health_update', function(data) { renderHealth(data); });
+
         socket.on('new_event', function(data) {
             var table = document.getElementById('events-table');
             var newRow = table.insertRow(0);
-            
             var cell1 = newRow.insertCell(0);
             var cell2 = newRow.insertCell(1);
-            
             cell1.className = 'timestamp';
-            cell1.innerHTML = data.timestamp.split(' ')[1];
-            
+            cell1.innerHTML = (data.timestamp || '').split(' ')[1] || '';
             cell2.className = data.event.includes('[!]') ? 'threat' : '';
             cell2.innerHTML = '[' + data.module + '] ' + data.event;
-
             if (data.lat && data.lon) {
                 L.marker([data.lat, data.lon]).addTo(map).bindPopup(data.desc).openPopup();
                 bounds.push([data.lat, data.lon]);
-                map.fitBounds(bounds);
+                if (bounds.length) map.fitBounds(bounds);
             }
         });
     </script>
@@ -103,53 +107,45 @@ HTML_TEMPLATE = """
 </html>
 """
 
-def extract_coordinates(event_text, module):
-    coord_pattern = re.compile(r'([-+]?\d{1,2}\.\d+),\s*([-+]?\d{1,3}\.\d+)')
-    match = coord_pattern.search(event_text)
-    if match:
-        lat, lon = float(match.group(1)), float(match.group(2))
-        return {"lat": lat, "lon": lon, "desc": f"[{module}] {event_text}"}
-    return None
 
-@app.route('/')
+@app.route("/")
 def index():
-    rows = []
-    if os.path.exists(DB_PATH):
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute('SELECT * FROM events ORDER BY id DESC LIMIT 50')
-            rows = c.fetchall()
-            conn.close()
-        except Exception as e:
-            print(f"Error accessing DB: {e}")
-    return render_template_string(HTML_TEMPLATE, rows=rows)
+    rows = store.get_recent_events(50)
+    return render_template_string(
+        HTML_TEMPLATE,
+        rows=rows,
+        map_lat=map_center.get("lat", 37.7749),
+        map_lon=map_center.get("lon", -122.4194),
+    )
+
 
 def db_monitor():
     last_id = 0
     while True:
         time.sleep(1)
-        if os.path.exists(DB_PATH):
-            try:
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                c.execute('SELECT * FROM events WHERE id > ? ORDER BY id ASC', (last_id,))
-                new_rows = c.fetchall()
-                conn.close()
-                for row in new_rows:
-                    last_id = row[0]
-                    coord = extract_coordinates(row[3], row[2])
-                    socketio.emit('new_event', {
-                        'timestamp': row[1],
-                        'module': row[2],
-                        'event': row[3],
-                        'lat': coord['lat'] if coord else None,
-                        'lon': coord['lon'] if coord else None,
-                        'desc': coord['desc'] if coord else None
-                    })
-            except: pass
+        for row in store.get_events_after(last_id):
+            last_id = row[0]
+            coord = extract_coordinates(row[3])
+            socketio.emit(
+                "new_event",
+                {
+                    "timestamp": row[1],
+                    "module": row[2],
+                    "event": row[3],
+                    "lat": coord["lat"] if coord else None,
+                    "lon": coord["lon"] if coord else None,
+                    "desc": f"[{row[2]}] {row[3]}" if coord else None,
+                },
+            )
 
-if __name__ == '__main__':
-    monitor_thread = threading.Thread(target=db_monitor, daemon=True)
-    monitor_thread.start()
-    socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+
+def health_monitor():
+    while True:
+        time.sleep(5)
+        socketio.emit("health_update", store.get_latest_health())
+
+
+if __name__ == "__main__":
+    threading.Thread(target=db_monitor, daemon=True).start()
+    threading.Thread(target=health_monitor, daemon=True).start()
+    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)

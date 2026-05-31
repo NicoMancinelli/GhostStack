@@ -1,4 +1,5 @@
-# Python dependencies (pip). RF stack tools (gnuradio, hackrf, rtl-sdr) install via apt — see scripts/install_deps.sh
+# Python dependencies (pip). RF/SDR tools install via apt — see scripts/install_deps.sh
+# ML/CV stack: pip install -r requirements-ml.txt
 scapy
 pyserial
 numpy
@@ -6,8 +7,6 @@ scipy
 cryptography
 paho-mqtt
 pymavlink
-ultralytics
-opencv-python
 SoapySDR
 pyyaml
 flask

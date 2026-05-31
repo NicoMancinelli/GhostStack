@@ -99,6 +99,20 @@ sequenceDiagram
 
 ---
 
+## Core Library (`ghoststack/`)
+
+Shared Python package used by the orchestrator, dashboard, and field modules:
+
+| Module | Responsibility |
+|--------|----------------|
+| `ghoststack/supervisor.py` | Process supervision, geo updates, policy dispatch |
+| `ghoststack/policies.py` | YAML policy evaluation and target templating |
+| `ghoststack/geo.py` | Safe-zone checks and coordinate parsing |
+| `ghoststack/database.py` | SQLite events and health persistence |
+| `ghoststack/modules.py` | RF / network / sentry module profiles |
+
+See `docs/ENGINEERING.md` for the full runbook and backlog.
+
 ## Modular Architecture
 
 ### 📡 RF/EW (`rf_ew/`)
@@ -127,7 +141,7 @@ Physical-layer interference for camera and LiDAR systems.
 ### 1. Docker Deployment (Recommended)
 GhostStack includes a fully containerized environment, ensuring all RF, ROS 2, and AI dependencies are isolated.
 ```bash
-git clone https://github.com/your-repo/GhostStack.git
+git clone https://github.com/NicoMancinelli/GhostStack.git
 cd GhostStack
 docker-compose up --build
 ```
@@ -152,6 +166,8 @@ chmod +x scripts/flash_esp32.sh
 You can orchestrate the entire suite using the Master Controller, which automatically logs threats to a local SQLite database:
 - `python3 scripts/ghoststack_ctl.py start-rf`
 - `python3 scripts/ghoststack_ctl.py start-network`
+- `python3 scripts/ghoststack_ctl.py start-all --sentry` (active sentry profile)
+- `python3 scripts/ghoststack_ctl.py stop-all` (remote stop via pidfile)
 - `python3 dashboard/app.py` (to view the real-time web interface)
 
 ---

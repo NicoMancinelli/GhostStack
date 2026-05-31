@@ -1,5 +1,5 @@
 # GhostStack Deployment Policies
-# Defines automated responses to specific sensor triggers.
+# Command strings may use {target_key} placeholders from config/targets.yaml
 
 policies:
   - name: "Auto-Neutralize Known Drones"
@@ -16,12 +16,12 @@ policies:
 
   - name: "Backdoor Failover Hijack"
     condition:
-      module: "quadruped_detect"
+      module: "unitree-detect"
       event_contains: "BACKDOOR AP DETECTED"
     actions:
       - type: "start_module"
         module_name: "killswitch"
-        command: "python3 network_analysis/robot_research/mavlink_killswitch.py 192.168.123.255"
+        command: "python3 network_analysis/robot_research/mavlink_killswitch.py {mavlink_broadcast}"
       - type: "log_event"
         message: "[ACTION] Unitree Backdoor Detected. Initiating MAVLink Hijack Sequence."
 

@@ -19,7 +19,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python requirements
-RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages
+RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages \
+    && pip3 install --no-cache-dir -r requirements-ml.txt --break-system-packages
 
 # Copy GhostStack source
 COPY . /app
