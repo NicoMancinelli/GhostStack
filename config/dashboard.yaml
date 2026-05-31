@@ -1,0 +1,8 @@
+# Tactical dashboard authentication (override via env vars in production)
+
+dashboard:
+  auth_enabled: true
+  username: ghost
+  password: stack
+  # Socket.IO clients may pass auth: { token: "<token>" }; defaults to username:password
+  token: ""

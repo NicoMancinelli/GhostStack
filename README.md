@@ -110,8 +110,10 @@ Shared Python package used by the orchestrator, dashboard, and field modules:
 | `ghoststack/geo.py` | Safe-zone checks and coordinate parsing |
 | `ghoststack/database.py` | SQLite events and health persistence |
 | `ghoststack/modules.py` | RF / network / sentry module profiles |
+| `ghoststack/mavlink.py` | GLOBAL_POSITION_INT / GPS_RAW_INT decode |
+| `ghoststack/auth.py` | Dashboard HTTP + Socket.IO authentication |
 
-See `docs/ENGINEERING.md` for the full runbook and backlog.
+See `docs/ENGINEERING.md` for the full runbook.
 
 ## Modular Architecture
 
@@ -168,7 +170,103 @@ You can orchestrate the entire suite using the Master Controller, which automati
 - `python3 scripts/ghoststack_ctl.py start-network`
 - `python3 scripts/ghoststack_ctl.py start-all --sentry` (active sentry profile)
 - `python3 scripts/ghoststack_ctl.py stop-all` (remote stop via pidfile)
-- `python3 dashboard/app.py` (to view the real-time web interface)
+- `python3 dashboard/app.py` (tactical UI — default login `ghost` / `stack`, change in `config/dashboard.yaml`)
+
+### 5. Verify Installation
+```bash
+pytest -q
+python3 scripts/smoke_test.py
+```
+
+---
+
+## Example Use Cases
+
+All scenarios assume **authorized lab environments** and compliant RF/optical regulations.
+
+### Use Case 1: RF Drone Signature Lab (GamutRF + Policy Auto-Response)
+
+**Goal:** Detect a known UAV control signature and log an automated optical countermeasure policy match.
+
+1. Start Mosquitto (or use GamutRF container MQTT) and the RF profile:
+   ```bash
+   python3 scripts/ghoststack_ctl.py start-rf --esp-port /dev/ttyUSB0
+   python3 dashboard/app.py
+   ```
+2. Publish a test inference message to `gamutrf/inference`:
+   ```json
+   {"predictions": {"dji_mavic": 0.95}, "center_freq": 2440000000}
+   ```
+3. **Expected:** Orchestrator logs `[!]` with `confidence: 0.95`; if ESP32 is connected and target is outside `config/safe_zones.yaml`, policy **Auto-Neutralize Known Drones** triggers the strobe.
+
+**Tunable:** Lower threshold in sentry mode: `python3 scripts/ghoststack_ctl.py start-rf --sentry`
+
+---
+
+### Use Case 2: MAVLink GPS Tracking & Geo-Fence Inhibition
+
+**Goal:** Plot live vehicle position on the dashboard and suppress effectors inside safe zones.
+
+1. Run ArduPilot SITL or `network_analysis/ghoststack_network/spoofing_node.py` (ROS 2) to emit `GLOBAL_POSITION_INT` on UDP/14550.
+2. Start network stack + dashboard:
+   ```bash
+   python3 scripts/ghoststack_ctl.py start-network
+   python3 dashboard/app.py
+   ```
+3. Open `http://localhost:5000` (authenticate if prompted).
+4. **Expected:** `mav-sniff` decodes real lat/lon from MAVLink (not map-center placeholders). Markers appear on the Leaflet map. Coordinates inside `config/safe_zones.yaml` set `is_in_safe_zone` and fire **Safe Zone Inhibition**.
+
+---
+
+### Use Case 3: Quadruped Backdoor Detection → MAVLink Failover
+
+**Goal:** Detect a hidden robot AP and launch the kill-switch against a configurable subnet.
+
+1. Edit `config/targets.yaml` (`mavlink_broadcast`) for your robot VLAN.
+2. Monitor mode on WiFi (`wlan0mon`), then:
+   ```bash
+   python3 scripts/ghoststack_ctl.py start-network --sentry
+   ```
+3. **Expected:** `unitree-detect` logs `[!] ... BACKDOOR AP DETECTED`; policy **Backdoor Failover Hijack** spawns `mavlink_killswitch.py` with `{mavlink_broadcast}` substituted.
+
+---
+
+### Use Case 4: Red-Team Demo (Live Kill Chain)
+
+**Goal:** End-to-end detect → visualize → disrupt for presentations (`docs/DEMO_SCRIPT.md`).
+
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | `python3 dashboard/app.py` + `ghoststack_ctl.py start-network --esp-port /dev/ttyUSB0` | Dashboard + orchestrator running |
+| 2 | Run MAVLink/spoofing telemetry | Threat rows in SQLite + map markers |
+| 3 | Observe ESP32 | Serial `b'1'` on policy match; auto `b'0'` after timeout |
+
+---
+
+### Use Case 5: Docker Field Stack
+
+**Goal:** Containerized RF core + authenticated dashboard sharing one database volume.
+
+```bash
+export GHOSTSTACK_DASHBOARD_PASSWORD='your-secure-password'
+docker-compose up --build
+```
+
+- Core: `http://host` (RF modules, host networking)
+- Dashboard: `http://localhost:5000` (user/password from env)
+- Shared DB: `./data/ghoststack.db`
+
+---
+
+### Use Case 6: CI / Headless Regression
+
+**Goal:** Validate core library without hardware.
+
+```bash
+pytest -q
+python3 scripts/smoke_test.py
+docker compose -f docker-compose.smoke.yml run --rm ghoststack-smoke
+```
 
 ---
 

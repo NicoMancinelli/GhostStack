@@ -73,12 +73,20 @@ Environment overrides: `GHOSTSTACK_DB`, `GHOSTSTACK_PIDFILE`, `GHOSTSTACK_SENTRY
 
 `network_analysis/` ships `package.xml` for colcon on a ROS Humble host. CI validates metadata only; full build is optional on target hardware.
 
-## Backlog (remaining)
+## Dashboard auth
 
-- [ ] Extract dashboard HTML to templates/static assets
-- [ ] Real GPS from MAVLink GLOBAL_POSITION_INT (not demo coordinates)
-- [ ] Integration tests with Docker Compose smoke profile
-- [ ] Auth on dashboard SocketIO endpoint
+- HTTP Basic or `X-GhostStack-Token` header on `/` and `/api/health`
+- Session login at `/login`
+- Socket.IO `connect` requires `auth: { token: "..." }` (see `dashboard/static/dashboard.js`)
+- Configure via `config/dashboard.yaml` or `GHOSTSTACK_DASHBOARD_USER` / `GHOSTSTACK_DASHBOARD_PASSWORD` / `GHOSTSTACK_DASHBOARD_TOKEN`
+- Disable for lab smoke tests: `GHOSTSTACK_DASHBOARD_AUTH=false`
+
+## Smoke / integration
+
+```bash
+python3 scripts/smoke_test.py
+docker compose -f docker-compose.smoke.yml run --rm ghoststack-smoke
+```
 
 ## Contribution
 

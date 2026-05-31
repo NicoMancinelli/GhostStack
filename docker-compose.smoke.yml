@@ -1,0 +1,10 @@
+# Headless smoke profile for CI — no SDR/USB privileges required
+
+services:
+  ghoststack-smoke:
+    build: .
+    environment:
+      PYTHONPATH: /app
+      GHOSTSTACK_DB: /tmp/ghoststack-smoke.db
+      GHOSTSTACK_DASHBOARD_AUTH: "false"
+    command: python3 scripts/smoke_test.py

@@ -1,38 +1,40 @@
-import struct
-
 from scapy.all import sniff
 from scapy.layers.inet import UDP
 
 from ghoststack.events import format_threat
+from ghoststack.mavlink import MSG_HEARTBEAT, extract_gps, parse_frame
 
-# GhostStack: Network Layer - MAVLink V2 Sniffer
+# GhostStack: Network Layer - MAVLink v1/v2 Sniffer (real GPS from telemetry)
 
 
 def mavlink_callback(pkt):
-    if pkt.haslayer(UDP) and pkt[UDP].dport == 14550:
-        raw = bytes(pkt[UDP].payload)
-        if len(raw) > 10 and raw[0] == 0xFD:
-            msg_id = struct.unpack("<I", raw[7:10] + b"\x00")[0]
-            sys_id = raw[5]
-            comp_id = raw[6]
+    if not (pkt.haslayer(UDP) and pkt[UDP].dport == 14550):
+        return
+    raw = bytes(pkt[UDP].payload)
+    frame = parse_frame(raw)
+    if not frame:
+        return
 
-            if msg_id == 0:
-                from ghoststack.config_loader import load_targets
+    gps = extract_gps(frame)
+    if gps:
+        alt_note = f", alt={gps.alt_m:.1f}m" if gps.alt_m is not None else ""
+        print(
+            format_threat(
+                f"{gps.source}: SysID={frame.sys_id}, CompID={frame.comp_id}{alt_note}",
+                lat=gps.lat,
+                lon=gps.lon,
+            )
+        )
+        return
 
-                center = load_targets().get("default_map_center", {})
-                print(
-                    format_threat(
-                        f"HEARTBEAT: SysID={sys_id}, CompID={comp_id}",
-                        lat=float(center.get("lat", 37.7749)),
-                        lon=float(center.get("lon", -122.4194)),
-                    )
-                )
-            else:
-                print(f"[*] MAVLINK: MsgID={msg_id}, SysID={sys_id}")
+    if frame.msg_id == MSG_HEARTBEAT:
+        print(f"[*] HEARTBEAT: SysID={frame.sys_id}, CompID={frame.comp_id}")
+    else:
+        print(f"[*] MAVLINK: MsgID={frame.msg_id}, SysID={frame.sys_id}")
 
 
 def main():
-    print("[*] Monitoring MAVLink traffic on UDP/14550...")
+    print("[*] Monitoring MAVLink traffic on UDP/14550 (GPS from GLOBAL_POSITION_INT / GPS_RAW_INT)...")
     sniff(filter="udp port 14550", prn=mavlink_callback, store=0)
 
 

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GhostStack Tactical Command</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div class="header">
+        <div class="title">GHOSTSTACK // TACTICAL COMMAND</div>
+        <div id="health-status" class="health">Loading health...</div>
+    </div>
+    <div class="main">
+        <div class="panel">
+            <div class="panel-title">Geospatial Intelligence (Real-Time)</div>
+            <div id="map"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-title">Mission Event Log</div>
+            <div class="log-container">
+                <table>
+                    <tbody id="events-table">
+                        {% for row in rows %}
+                        <tr>
+                            <td class="timestamp">{{ row[1].split(' ')[1] if row[1] else '' }}</td>
+                            <td class="{{ 'threat' if '[!]' in row[3] else '' }}">[{{ row[2] }}] {{ row[3] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+        window.GHOSTSTACK_MAP = { lat: {{ map_lat }}, lon: {{ map_lon }} };
+        window.GHOSTSTACK_AUTH = {{ auth_json | safe }};
+    </script>
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
