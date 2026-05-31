@@ -1,0 +1,9 @@
+# GhostStack target endpoints — referenced by policies via {variable} templates
+
+targets:
+  mavlink_broadcast: "192.168.123.255"
+  mavlink_port: 14550
+  wifi_monitor_interface: "wlan0mon"
+  default_map_center:
+    lat: 37.7749
+    lon: -122.4194

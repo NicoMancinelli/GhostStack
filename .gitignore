@@ -6,6 +6,7 @@ dist/
 build/
 *.db
 missions/
+run/
 .env
 .venv/
 venv/

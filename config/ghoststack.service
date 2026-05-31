@@ -6,11 +6,14 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/GhostStack
+Environment=PYTHONPATH=/opt/GhostStack
+Environment=GHOSTSTACK_PIDFILE=/opt/GhostStack/run/ghoststack.pid
 ExecStart=/usr/bin/python3 scripts/ghoststack_ctl.py start-all
+ExecStop=/usr/bin/python3 scripts/ghoststack_ctl.py stop-all
+PIDFile=/opt/GhostStack/run/ghoststack.pid
 Restart=on-failure
 RestartSec=5
 
-# Logging
 StandardOutput=append:/var/log/ghoststack.log
 StandardError=append:/var/log/ghoststack_error.log
 
