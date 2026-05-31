@@ -3,7 +3,7 @@
 import os
 import secrets
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Optional
 
 from flask import Request, request, session
 
