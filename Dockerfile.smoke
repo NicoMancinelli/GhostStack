@@ -1,0 +1,11 @@
+# Lightweight image for headless CI smoke (no SDR/ROS/hardware)
+FROM python:3.10-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt pytest
+
+COPY . /app
+ENV PYTHONPATH=/app
+
+CMD ["python3", "scripts/smoke_test.py"]

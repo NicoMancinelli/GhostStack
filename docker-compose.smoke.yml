@@ -2,7 +2,9 @@
 
 services:
   ghoststack-smoke:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.smoke
     environment:
       PYTHONPATH: /app
       GHOSTSTACK_DB: /tmp/ghoststack-smoke.db

@@ -18,7 +18,9 @@ sudo apt install -y \
     hackrf \
     gqrx-sdr \
     inspectrum \
-    libitpp-dev
+    libitpp-dev \
+    soapysdr-tools \
+    python3-soapysdr
 
 # Install Network Layer Tools
 echo "[*] Installing Network Layer..."

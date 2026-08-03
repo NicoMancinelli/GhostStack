@@ -40,6 +40,7 @@ python3 dashboard/app.py
 ```
 
 **Dependencies:** `scripts/install_deps.sh` (apt + `requirements.txt`). ML: `pip install -r requirements-ml.txt`.
+SoapySDR / GNU Radio install via apt only (not PyPI).
 
 **Tests:** `pytest -q`
 
