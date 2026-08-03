@@ -6,8 +6,12 @@ services:
     container_name: ghoststack-core
     privileged: true # Required for direct SDR/USB hardware access
     network_mode: "host" # Required for raw packet sniffing
+    environment:
+      PYTHONPATH: /app
+      GHOSTSTACK_DB: /app/data/ghoststack.db
     volumes:
       - /dev/bus/usb:/dev/bus/usb
+      - ./data:/app/data
     # Starts the RF scanner by default for demonstration
     command: python3 scripts/ghoststack_ctl.py start-rf
     
@@ -16,6 +20,13 @@ services:
     container_name: ghoststack-dashboard
     ports:
       - "5000:5000"
+    environment:
+      PYTHONPATH: /app
+      GHOSTSTACK_DB: /app/data/ghoststack.db
+      GHOSTSTACK_DASHBOARD_USER: ${GHOSTSTACK_DASHBOARD_USER:-ghost}
+      GHOSTSTACK_DASHBOARD_PASSWORD: ${GHOSTSTACK_DASHBOARD_PASSWORD:-stack}
+    volumes:
+      - ./data:/app/data
     command: python3 dashboard/app.py
     depends_on:
       - ghoststack-core

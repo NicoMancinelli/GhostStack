@@ -18,7 +18,9 @@ sudo apt install -y \
     hackrf \
     gqrx-sdr \
     inspectrum \
-    libitpp-dev
+    libitpp-dev \
+    soapysdr-tools \
+    python3-soapysdr
 
 # Install Network Layer Tools
 echo "[*] Installing Network Layer..."
@@ -40,6 +42,7 @@ sudo apt install -y \
 # Install Python Requirements
 echo "[*] Installing Python dependencies..."
 pip3 install -r requirements.txt --break-system-packages || pip3 install -r requirements.txt
+echo "[*] Optional: install ML/CV stack with: pip3 install -r requirements-ml.txt"
 
 # Post-Install Setup
 sudo rosdep init || echo "[!] rosdep already initialized"

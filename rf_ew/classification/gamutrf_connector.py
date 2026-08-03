@@ -1,22 +1,29 @@
-import paho.mqtt.client as mqtt
 import json
 import logging
+import os
 import time
 
+import paho.mqtt.client as mqtt
+
+from ghoststack.events import format_threat
+
 # GhostStack: GamutRF MQTT Connector
-#
-# Connects to the local GamutRF inference stream via MQTT.
-# When GamutRF identifies a specific RF signature (e.g., 'dji_mavic'),
-# it prints an alert that ghoststack_ctl.py logs to the database.
+# Emits structured threat lines for the policy engine (module name: gamutrf).
 
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-MQTT_BROKER = "127.0.0.1"
-MQTT_PORT = 1883
-MQTT_TOPIC = "gamutrf/inference"
-CONFIDENCE_THRESHOLD = 0.85
+MQTT_BROKER = os.environ.get("GHOSTSTACK_MQTT_BROKER", "127.0.0.1")
+MQTT_PORT = int(os.environ.get("GHOSTSTACK_MQTT_PORT", "1883"))
+MQTT_TOPIC = os.environ.get("GHOSTSTACK_MQTT_TOPIC", "gamutrf/inference")
+CONFIDENCE_THRESHOLD = float(
+    os.environ.get(
+        "GHOSTSTACK_GAMUTRF_CONFIDENCE",
+        "0.75" if os.environ.get("GHOSTSTACK_SENTRY") == "1" else "0.85",
+    )
+)
 
 TARGET_CLASSES = ["dji_mavic", "dji_phantom", "parrot", "generic_uav"]
+
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -25,26 +32,27 @@ def on_connect(client, userdata, flags, rc):
     else:
         logging.error(f"[-] Failed to connect to MQTT broker. Code: {rc}")
 
+
 def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
-        
-        # Expected GamutRF JSON Structure (simplified)
-        # {"predictions": {"dji_mavic": 0.92, "wifi": 0.1}, "center_freq": 2440000000}
-        
         predictions = payload.get("predictions", {})
-        center_freq = payload.get("center_freq", 0) / 1e6 # Convert to MHz
-        
+        center_freq = payload.get("center_freq", 0) / 1e6
+
         for tgt in TARGET_CLASSES:
             if tgt in predictions and predictions[tgt] >= CONFIDENCE_THRESHOLD:
-                conf = predictions[tgt]
-                # The '[!]' prefix flags this as a threat to ghoststack_ctl.py
-                logging.info(f"[!] GamutRF Detection: '{tgt}' at {center_freq} MHz (Conf: {conf:.2f})")
-                
+                conf = float(predictions[tgt])
+                logging.info(
+                    format_threat(
+                        f"GamutRF Detection: '{tgt}' at {center_freq:.1f} MHz",
+                        confidence=conf,
+                    )
+                )
     except json.JSONDecodeError:
         pass
-    except Exception as e:
-        logging.error(f"Error parsing message: {e}")
+    except Exception as exc:
+        logging.error(f"Error parsing message: {exc}")
+
 
 def main():
     client = mqtt.Client()
@@ -52,8 +60,8 @@ def main():
     client.on_message = on_message
 
     logging.info(f"[*] Starting GamutRF Connector. Connecting to {MQTT_BROKER}:{MQTT_PORT}...")
-    
-    # Retry loop in case GamutRF is still spinning up
+    logging.info(f"[*] Confidence threshold: {CONFIDENCE_THRESHOLD}")
+
     while True:
         try:
             client.connect(MQTT_BROKER, MQTT_PORT, 60)
@@ -63,6 +71,7 @@ def main():
             time.sleep(5)
 
     client.loop_forever()
+
 
 if __name__ == "__main__":
     main()
